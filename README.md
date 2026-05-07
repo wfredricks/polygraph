@@ -99,6 +99,27 @@ await graph.close();
 - Multi-step chains: `.outgoing('KNOWS').incoming('WORKS_AT')` - follow patterns across relationship types
 - Three collection modes: `collect()` (nodes), `collectPaths()` (full paths), `collectSubgraph()` (nodes + relationships)
 
+**Cypher Bridge**
+- Lightweight Cypher query support for Neo4j familiarity
+- Supported: MATCH, WHERE, RETURN, CREATE, SET, DELETE, LIMIT
+- WHERE operators: `=`, `<>`, `>`, `>=`, `<`, `<=`, `CONTAINS`, `STARTS WITH`, `ENDS WITH`
+
+```typescript
+// Query with Cypher — feels like Neo4j
+const friends = await graph.query(
+  `MATCH (a:Person)-[:KNOWS]->(b:Person) WHERE a.name = 'Alice' RETURN b.name`
+);
+
+// Create with Cypher
+await graph.query(`CREATE (n:Person {name: 'Bob', age: 25})`);
+
+// Update with Cypher
+await graph.query(`MATCH (n:Person) WHERE n.name = 'Bob' SET n.age = 26`);
+
+// Delete with Cypher
+await graph.query(`MATCH (n:Temp) WHERE n.status = 'expired' DELETE n`);
+```
+
 **Algorithms**
 - BFS shortest path
 - Dijkstra weighted shortest path (via `costProperty`)
@@ -176,7 +197,7 @@ Full benchmark suite: `npm run test:bench`
 
 **v0.1 - Core Engine MVP** ✅ *(current)*
 
-- 284 tests passing (166 functional + 60 security + 25 benchmarks + 33 persistence)
+- 307 tests passing (166 functional + 60 security + 25 benchmarks + 33 persistence + 23 Cypher bridge)
 - 95%+ statement / 100% function coverage
 - 100-transaction audit workload completes in ~25ms
 

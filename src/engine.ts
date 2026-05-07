@@ -26,6 +26,11 @@ import type {
 import { MemoryAdapter } from './adapters/memory.js';
 import { TraversalBuilder } from './traversal.js';
 import {
+  // Cypher bridge
+  parseCypher,
+  whereToFilter,
+  type CypherQueryPlan,
+  type CypherNodePattern,
   // Filters
   matchesFilter,
   extractEqualityValue,
@@ -471,6 +476,236 @@ export class PolyGraph {
     } catch (error) {
       throw error;
     }
+  }
+
+  // ─── Cypher Bridge ─────────────────────────────────────────────────
+
+  /**
+   * Executes a lightweight Cypher query against the graph.
+   *
+   * Why: Developers coming from Neo4j think in Cypher. This bridge covers
+   * the most common patterns (MATCH, WHERE, RETURN, CREATE, SET, DELETE)
+   * without a full parser. See src/pure/cypher.ts for the supported subset.
+   *
+   * @param cypher - A Cypher query string
+   * @returns Query results (shape depends on the query type)
+   */
+  async query(cypher: string): Promise<any[]> {
+    const plan = parseCypher(cypher);
+    return this.executePlan(plan);
+  }
+
+  private async executePlan(plan: CypherQueryPlan): Promise<any[]> {
+    switch (plan.type) {
+      case 'create-node': {
+        const node = await this.createNode(
+          plan.node.labels,
+          plan.node.properties ?? {}
+        );
+        return [{ [plan.node.variable ?? 'node']: node }];
+      }
+
+      case 'create-path': {
+        // Create start node if it has labels (new node)
+        // For now, create-path creates both nodes and the relationship
+        const startNode = await this.createNode(
+          plan.pattern.start.labels,
+          plan.pattern.start.properties ?? {}
+        );
+
+        const results: any[] = [];
+        let currentNode = startNode;
+
+        for (const seg of plan.pattern.segments) {
+          const endNode = await this.createNode(
+            seg.node.labels,
+            seg.node.properties ?? {}
+          );
+
+          const [from, to] = seg.rel.direction === 'incoming'
+            ? [endNode.id, currentNode.id]
+            : [currentNode.id, endNode.id];
+
+          const rel = await this.createRelationship(
+            from, to,
+            seg.rel.type ?? 'RELATED_TO',
+            seg.rel.properties ?? {}
+          );
+
+          results.push({
+            [plan.pattern.start.variable ?? 'start']: startNode,
+            [seg.node.variable ?? 'end']: endNode,
+            [seg.rel.variable ?? 'rel']: rel,
+          });
+
+          currentNode = endNode;
+        }
+
+        return results;
+      }
+
+      case 'match': {
+        return this.executeMatch(plan);
+      }
+
+      case 'match-set': {
+        const matches = await this.executeMatch({
+          type: 'match',
+          pattern: plan.pattern,
+          where: plan.where,
+        });
+
+        for (const row of matches) {
+          for (const assignment of plan.set.assignments) {
+            const target = row[assignment.variable];
+            if (target && 'labels' in target) {
+              // It's a node
+              await this.updateNode(target.id, { [assignment.property]: assignment.value });
+              target.properties[assignment.property] = assignment.value;
+            }
+          }
+        }
+
+        return matches;
+      }
+
+      case 'match-delete': {
+        const matches = await this.executeMatch({
+          type: 'match',
+          pattern: plan.pattern,
+          where: plan.where,
+        });
+
+        for (const row of matches) {
+          for (const varName of plan.delete) {
+            const target = row[varName];
+            if (target && 'labels' in target) {
+              await this.deleteNode(target.id);
+            } else if (target && 'type' in target && 'startNode' in target) {
+              await this.deleteRelationship(target.id);
+            }
+          }
+        }
+
+        return matches;
+      }
+
+      default:
+        throw new Error(`Unsupported query plan type: ${(plan as any).type}`);
+    }
+  }
+
+  private async executeMatch(plan: Extract<CypherQueryPlan, { type: 'match' }>): Promise<any[]> {
+    const { pattern, where, returns, limit } = plan;
+    const startLabel = pattern.start.labels[0];
+
+    // Build filter for start node from WHERE clause
+    const startFilter = where && pattern.start.variable
+      ? whereToFilter(where, pattern.start.variable)
+      : undefined;
+
+    // Find matching start nodes
+    let startNodes: Node[];
+    if (startLabel) {
+      startNodes = await this.findNodes(startLabel, startFilter ?? undefined);
+    } else {
+      // No label — would need a full scan. For now, require a label.
+      throw new Error('MATCH requires at least one label on the start node pattern');
+    }
+
+    // Apply property filter from inline pattern {prop: value}
+    if (pattern.start.properties) {
+      startNodes = startNodes.filter((n) =>
+        matchesFilter(n.properties, pattern.start.properties!)
+      );
+    }
+
+    // If no relationship segments, return start nodes directly
+    if (pattern.segments.length === 0) {
+      let results: any[] = startNodes.map((n) => ({
+        [pattern.start.variable ?? '_']: n,
+      }));
+
+      if (limit) results = results.slice(0, limit);
+      return this.formatResults(results, returns);
+    }
+
+    // Traverse segments
+    let results: any[] = [];
+
+    for (const startNode of startNodes) {
+      let currentNodes: Array<{ node: Node; row: Record<string, any> }> = [
+        { node: startNode, row: { [pattern.start.variable ?? '_']: startNode } },
+      ];
+
+      for (const seg of pattern.segments) {
+        const nextLevel: typeof currentNodes = [];
+
+        for (const { node: current, row } of currentNodes) {
+          const neighbors = await this.getNeighbors(
+            current.id,
+            seg.rel.type ? [seg.rel.type] : undefined,
+            seg.rel.direction
+          );
+
+          // Filter by end node label
+          for (const { node: neighbor, relationship } of neighbors) {
+            if (seg.node.labels.length > 0 &&
+                !seg.node.labels.some((l) => neighbor.labels.includes(l))) {
+              continue;
+            }
+
+            // Apply WHERE conditions for this variable
+            if (where && seg.node.variable) {
+              const endFilter = whereToFilter(where, seg.node.variable);
+              if (endFilter && !matchesFilter(neighbor.properties, endFilter)) {
+                continue;
+              }
+            }
+
+            // Apply inline property filter
+            if (seg.node.properties && !matchesFilter(neighbor.properties, seg.node.properties)) {
+              continue;
+            }
+
+            nextLevel.push({
+              node: neighbor,
+              row: {
+                ...row,
+                [seg.node.variable ?? '_end']: neighbor,
+                ...(seg.rel.variable ? { [seg.rel.variable]: relationship } : {}),
+              },
+            });
+          }
+        }
+
+        currentNodes = nextLevel;
+      }
+
+      for (const { row } of currentNodes) {
+        results.push(row);
+      }
+    }
+
+    if (limit) results = results.slice(0, limit);
+    return this.formatResults(results, returns);
+  }
+
+  private formatResults(rows: any[], returns?: { items: Array<{ variable: string; property?: string; alias?: string }> }): any[] {
+    if (!returns) return rows;
+
+    return rows.map((row) => {
+      const formatted: Record<string, any> = {};
+      for (const item of returns.items) {
+        const value = row[item.variable];
+        if (item.property && value && typeof value === 'object' && 'properties' in value) {
+          formatted[item.alias ?? `${item.variable}.${item.property}`] = value.properties[item.property];
+        } else {
+          formatted[item.alias ?? item.variable] = value;
+        }
+      }
+      return formatted;
+    });
   }
 
   // ─── Index Management ──────────────────────────────────────────────
