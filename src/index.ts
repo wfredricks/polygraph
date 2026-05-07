@@ -1,0 +1,12 @@
+/**
+ * PolyGraph — Purpose-built embeddable graph engine
+ *
+ * Why: Government-ownable alternative to Neo4j for labeled property graph workloads.
+ * No FedRAMP gaps, no licensing constraints, no enterprise bloat.
+ * Embeds like SQLite — import as a library, no separate server process.
+ */
+
+export * from './types.js';
+export { PolyGraph } from './engine.js';
+export { MemoryAdapter } from './adapters/memory.js';
+export { TraversalBuilder } from './traversal.js';
