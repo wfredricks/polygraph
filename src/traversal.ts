@@ -23,6 +23,7 @@ import type {
   Direction,
 } from './types.js';
 import type { PolyGraph } from './engine.js';
+import { matchesFilter } from './pure/filters.js';
 
 interface TraversalStep {
   direction: Direction;
@@ -200,7 +201,7 @@ export class TraversalBuilder {
       );
 
       for (const { node } of neighbors) {
-        if (step.filter && !this.matchesFilter(node.properties, step.filter)) {
+        if (step.filter && !matchesFilter(node.properties, step.filter)) {
           continue;
         }
 
@@ -270,7 +271,7 @@ export class TraversalBuilder {
       );
 
       for (const { node, relationship } of neighbors) {
-        if (step.filter && !this.matchesFilter(node.properties, step.filter)) {
+        if (step.filter && !matchesFilter(node.properties, step.filter)) {
           continue;
         }
 
@@ -329,7 +330,7 @@ export class TraversalBuilder {
       for (const { node, relationship } of neighbors) {
         relationships.set(relationship.id, relationship);
 
-        if (step.filter && !this.matchesFilter(node.properties, step.filter)) {
+        if (step.filter && !matchesFilter(node.properties, step.filter)) {
           continue;
         }
 
@@ -348,34 +349,4 @@ export class TraversalBuilder {
     };
   }
 
-  /**
-   * Helper to match properties against a filter.
-   */
-  private matchesFilter(properties: Record<string, any>, filter: PropertyFilter): boolean {
-    for (const [key, condition] of Object.entries(filter)) {
-      const value = properties[key];
-
-      if (typeof condition !== 'object' || condition === null) {
-        if (value !== condition) return false;
-        continue;
-      }
-
-      if ('$eq' in condition && value !== condition.$eq) return false;
-      if ('$neq' in condition && value === condition.$neq) return false;
-      if ('$gt' in condition && !(value > condition.$gt)) return false;
-      if ('$gte' in condition && !(value >= condition.$gte)) return false;
-      if ('$lt' in condition && !(value < condition.$lt)) return false;
-      if ('$lte' in condition && !(value <= condition.$lte)) return false;
-      if ('$in' in condition && !condition.$in.includes(value)) return false;
-      if ('$contains' in condition && !String(value).includes(condition.$contains)) return false;
-      if ('$startsWith' in condition && !String(value).startsWith(condition.$startsWith)) return false;
-      if ('$endsWith' in condition && !String(value).endsWith(condition.$endsWith)) return false;
-      if ('$exists' in condition) {
-        const exists = value !== undefined && value !== null;
-        if (exists !== condition.$exists) return false;
-      }
-    }
-
-    return true;
-  }
 }
