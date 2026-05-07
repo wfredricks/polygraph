@@ -197,7 +197,7 @@ Full benchmark suite: `npm run test:bench`
 
 **v0.1 - Core Engine MVP** ✅ *(current)*
 
-- 307 tests passing (166 functional + 60 security + 25 benchmarks + 33 persistence + 23 Cypher bridge)
+- 343 tests passing (166 functional + 60 security + 25 benchmarks + 33 persistence + 23 Cypher bridge + 36 proxy adapter)
 - 95%+ statement / 100% function coverage
 - 100-transaction audit workload completes in ~25ms
 
@@ -229,6 +229,19 @@ See **[ROADMAP.md](ROADMAP.md)** for the full plan, design rationale, and future
 │            Storage Adapter                   │
 │   MemoryAdapter (default) │ LevelAdapter      │
 └─────────────────────────────────────────────┘
+```
+
+**Graph Proxy** — Application-level adapter pattern. Drop-in replacement for Neo4j adapters:
+
+```typescript
+import { PolyGraphProxyAdapter } from 'polygraph-db';
+
+const adapter = new PolyGraphProxyAdapter({ storage: 'persistent', path: './data' });
+await adapter.connect();
+await adapter.createGraphSpace('my-app');
+
+// Full CRUD, traversal, upsert, batch, portable queries, Cypher — all through one interface
+const node = await adapter.createNode('my-app', 'Person', { name: 'Alice' });
 ```
 
 **Key design:** Index-free adjacency. Outgoing and incoming relationships are stored directly with the node via sorted key prefixes, making neighbor traversal O(neighbors) with no index hop. This is the same principle that makes Neo4j fast - we just implement it on our terms.

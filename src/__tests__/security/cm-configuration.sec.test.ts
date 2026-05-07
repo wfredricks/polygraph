@@ -24,6 +24,7 @@ describe('NIST 800-53: CM — Configuration Management', () => {
         'LevelAdapter',
         'MemoryAdapter',
         'PolyGraph',
+        'PolyGraphProxyAdapter',
         'TraversalBuilder',
       ];
 
