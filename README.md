@@ -97,14 +97,25 @@ await graph.close();
 
 **Storage**
 - Pluggable adapter pattern
-- In-memory adapter (default) — zero dependencies, instant startup
-- RocksDB adapter (coming) — persistent, production-grade
+- In-memory adapter (default) — zero native dependencies, instant startup
+- **LevelDB adapter** — persistent, production-grade, data survives restarts
+
+```typescript
+import { PolyGraph, LevelAdapter } from 'polygraph-db';
+
+const graph = new PolyGraph({
+  adapter: new LevelAdapter({ path: './my-graph-db' })
+});
+await graph.open();
+// ... your graph persists to disk
+await graph.close();
+```
 
 ## Design Principles
 
 1. **Embed, don't deploy.** Import like SQLite. No server process, no wire protocol, no ops.
 2. **Purpose-built, not general-purpose.** We build what real workloads need. No speculative features.
-3. **Proven foundations.** Storage is delegated to battle-tested engines (RocksDB). We build graph semantics on top.
+3. **Proven foundations.** Storage is delegated to battle-tested engines (LevelDB). We build graph semantics on top.
 4. **TypeScript-native.** Fluent API, full type safety, no query language needed. Your IDE is your query tool.
 5. **Auditable.** Every line readable. Small codebase = smaller attack surface = faster authorization.
 
@@ -152,12 +163,12 @@ Full benchmark suite: `npm run test:bench`
 
 **v0.1 — Core Engine MVP** ✅ *(current)*
 
-- 251 tests passing (166 functional + 60 security + 25 benchmarks)
-- 95.6% statement / 100% function coverage
+- 284 tests passing (166 functional + 60 security + 25 benchmarks + 33 persistence)
+- 95%+ statement / 100% function coverage
 - 100-transaction audit workload completes in ~25ms
 
 **v0.2 — Persistent Storage** 🔨 *(next)*
-- RocksDB adapter, WAL crash recovery, backup/restore, npm publish
+- ~~RocksDB adapter~~ → LevelDB adapter (done!), WAL crash recovery, backup/restore, npm publish
 
 **v0.3 — TwinGraph Specialization**
 - Digital twin schema, lifecycle, memory/insight operations, Neo4j migration tooling
@@ -182,7 +193,7 @@ See **[ROADMAP.md](ROADMAP.md)** for the full plan, design rationale, and future
 │  Graph API · Traversal · Indexes · Tx Mgr   │
 ├─────────────────────────────────────────────┤
 │            Storage Adapter                   │
-│   MemoryAdapter (default) │ RocksDB (soon)  │
+│   MemoryAdapter (default) │ LevelAdapter      │
 └─────────────────────────────────────────────┘
 ```
 

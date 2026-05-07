@@ -9,4 +9,6 @@
 export * from './types.js';
 export { PolyGraph } from './engine.js';
 export { MemoryAdapter } from './adapters/memory.js';
+export { LevelAdapter } from './adapters/level.js';
+export type { LevelAdapterOptions } from './adapters/level.js';
 export { TraversalBuilder } from './traversal.js';

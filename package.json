@@ -57,6 +57,7 @@
     "prepublishOnly": "npm run build && npm test"
   },
   "dependencies": {
+    "classic-level": "^3.0.0",
     "msgpackr": "^2.0.1"
   },
   "devDependencies": {

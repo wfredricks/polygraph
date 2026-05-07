@@ -21,6 +21,7 @@ describe('NIST 800-53: CM — Configuration Management', () => {
 
       // These are the ONLY things that should be exported
       const expectedExports = [
+        'LevelAdapter',
         'MemoryAdapter',
         'PolyGraph',
         'TraversalBuilder',
