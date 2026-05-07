@@ -94,25 +94,25 @@ export class PolyGraph {
 
   // ─── Node Operations ───────────────────────────────────────────────
 
-  async createNode(labels: string[], properties: Record<string, any> = {}): Promise<Node> {
-    const id = randomUUID();
-    const node: Node = { id, labels, properties };
+  async createNode(labels: string[], properties: Record<string, any> = {}, id?: string): Promise<Node> {
+    const nodeId = id ?? randomUUID();
+    const node: Node = { id: nodeId, labels, properties };
     const marker = existsMarker();
 
     const ops: Array<{ type: 'put' | 'del'; key: string; value?: Buffer }> = [];
 
-    ops.push({ type: 'put', key: nodeKey(id), value: serializeNode(node) });
+    ops.push({ type: 'put', key: nodeKey(nodeId), value: serializeNode(node) });
 
     for (const label of labels) {
-      ops.push({ type: 'put', key: nodeLabelKey(id, label), value: marker });
-      ops.push({ type: 'put', key: labelIndexKey(label, id), value: marker });
+      ops.push({ type: 'put', key: nodeLabelKey(nodeId, label), value: marker });
+      ops.push({ type: 'put', key: labelIndexKey(label, nodeId), value: marker });
     }
 
     // Property indexes
     for (const label of labels) {
       for (const [propKey, propValue] of Object.entries(properties)) {
         if (this.indexes.has(`${label}:${propKey}`)) {
-          ops.push({ type: 'put', key: propIndexKey(label, propKey, propValue, id), value: marker });
+          ops.push({ type: 'put', key: propIndexKey(label, propKey, propValue, nodeId), value: marker });
         }
       }
     }

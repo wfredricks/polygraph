@@ -178,10 +178,17 @@ export class PolyGraphProxyAdapter implements GraphProxyAdapter {
   // ─── Node Operations ───────────────────────────────────────────────
 
   async createNode(graphSpace: string, label: string, properties: Record<string, any>): Promise<GraphNode> {
+    // Support explicit ID via _id or {label}Id convention (e.g., userId for User)
+    const explicitId = properties._id || properties[`${label.toLowerCase()}Id`] || undefined;
+    const props = { ...properties, _id: explicitId ?? undefined };
+
     const node = await this.graph.createNode(
       [scopedLabel(graphSpace, label)],
-      properties
+      props,
+      explicitId
     );
+    // Ensure _id is set on returned properties
+    node.properties._id = node.id;
     return toGraphNode(node);
   }
 
@@ -487,5 +494,25 @@ export class PolyGraphProxyAdapter implements GraphProxyAdapter {
       'indexes', 'cypher-bridge', 'upsert', 'graph-spaces',
     ]);
     return supported.has(feature);
+  }
+
+  // ─── Convenience (matches MockAdapter API) ─────────────────────────
+
+  /** Current node count (convenience for testing) */
+  get nodeCount(): number | Promise<number> {
+    return this.graph.stats().then((s) => s.nodeCount);
+  }
+
+  /** Current relationship count (convenience for testing) */
+  get relationshipCount(): number | Promise<number> {
+    return this.graph.stats().then((s) => s.relationshipCount);
+  }
+
+  /** Resets the adapter — closes and reopens with a fresh MemoryAdapter */
+  async reset(): Promise<void> {
+    await this.graph.close();
+    this.graph = new PolyGraph({ adapter: new MemoryAdapter() });
+    await this.graph.open();
+    this.graphSpaces.clear();
   }
 }
