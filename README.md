@@ -112,11 +112,48 @@ await graph.close();
 
 **TwinGraph** (coming) — a PolyGraph specialization for digital twin applications, with pre-defined schemas for persona, memory, insight, and habit management, plus lifecycle integration for born/alive/sleeping/archived twin states.
 
+## Performance
+
+Benchmarked on Apple M-series (Mac mini, in-memory adapter):
+
+**CRUD Throughput**
+
+| Operation | ops/sec | Avg Latency |
+|-----------|---------|-------------|
+| Node CREATE | 181,000 | 6µs |
+| Node READ | 864,000 | 1µs |
+| Node UPDATE | 365,000 | 3µs |
+| Relationship CREATE | 142,000 | 7µs |
+| Relationship READ | 843,000 | 1µs |
+
+**Traversal Throughput** (1,000-node graphs)
+
+| Operation | ops/sec | Avg Latency |
+|-----------|---------|-------------|
+| Depth-1 (5 neighbors) | 1,783 | 561µs |
+| Depth-2 (30 nodes, tree) | 288 | 3.5ms |
+| Depth-4 (780 nodes, full tree) | 12 | 83ms |
+| Friends-of-friends (social) | 55 | 18ms |
+| Neighborhood depth-2 | 159 | 6.3ms |
+| Shortest path (~50 hops) | 27 | 36ms |
+
+**Memory Footprint**
+
+| Scale | Total | Per Entity |
+|-------|-------|------------|
+| 1K nodes | 2.1 MB | ~2.1 KB/node |
+| 10K nodes | 12.5 MB | ~1.3 KB/node |
+| 10K nodes + 20K rels | 38.5 MB | ~1.3 KB/entity |
+| Empty graph | 2.5 KB | — |
+
+Full benchmark suite: `npm run test:bench`
+
 ## Status & Roadmap
 
 **v0.1 — Core Engine MVP** ✅ *(current)*
 
-- 166 tests passing, 93% statement / 98% function coverage
+- 251 tests passing (166 functional + 60 security + 25 benchmarks)
+- 95.6% statement / 100% function coverage
 - 100-transaction audit workload completes in ~25ms
 
 **v0.2 — Persistent Storage** 🔨 *(next)*

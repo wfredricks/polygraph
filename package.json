@@ -53,6 +53,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:security": "vitest run src/__tests__/security/",
+    "test:bench": "vitest run src/__tests__/benchmarks/",
     "prepublishOnly": "npm run build && npm test"
   },
   "dependencies": {
