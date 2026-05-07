@@ -112,22 +112,26 @@ await graph.close();
 
 **TwinGraph** (coming) — a PolyGraph specialization for digital twin applications, with pre-defined schemas for persona, memory, insight, and habit management, plus lifecycle integration for born/alive/sleeping/archived twin states.
 
-## Status
+## Status & Roadmap
 
-**v0.1 — Core Engine MVP**
+**v0.1 — Core Engine MVP** ✅ *(current)*
 
-- 166 tests passing
-- 93% statement coverage, 98% function coverage
+- 166 tests passing, 93% statement / 98% function coverage
 - 100-transaction audit workload completes in ~25ms
 
-This is early. The foundation is solid and tested, but there's more to build:
+**v0.2 — Persistent Storage** 🔨 *(next)*
+- RocksDB adapter, WAL crash recovery, backup/restore, npm publish
 
-- [ ] RocksDB persistent adapter
-- [ ] TwinGraph specialization
-- [ ] Backup/restore (snapshot + replay)
-- [ ] Optional REST/gRPC server wrapper
-- [ ] Cypher subset parser (for analyst tooling)
-- [ ] Benchmarks against Neo4j for equivalent workloads
+**v0.3 — TwinGraph Specialization**
+- Digital twin schema, lifecycle, memory/insight operations, Neo4j migration tooling
+
+**v0.4 — Hardening & Server Mode**
+- REST/gRPC wrapper, health/metrics, auth, connection pooling
+
+**v0.5 — Query Language**
+- Cypher subset parser, query planner, REPL
+
+See **[ROADMAP.md](ROADMAP.md)** for the full plan, design rationale, and future directions.
 
 ## Architecture
 
