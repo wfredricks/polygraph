@@ -107,3 +107,22 @@ These aren't committed — they're directions we're exploring based on real need
 If you're working in government, defense, or regulated industries and have graph database needs that commercial products can't meet (authorization, air-gap, ownership), we want to hear from you. Open an issue, start a discussion, or just star the repo to signal interest.
 
 The roadmap evolves based on what real users need. Your use case shapes what gets built next.
+
+---
+
+## 🔥 v0.4 — Vector Search (NEW — 2026-05-07)
+
+*Graph + vectors in one engine. The WOW factor.*
+
+**Why:** Real RAG needs vector similarity search alongside graph traversal. Today you need PolyGraph + Qdrant (or Pinecone, or pgvector). With vector search built in, one `npm install` gives you both — graph traversal AND semantic search. Nobody has this in pure TypeScript.
+
+- [ ] **HNSW index** — Hierarchical Navigable Small World for approximate nearest neighbor
+- [ ] **Vector property type** — nodes can store float32 arrays as properties
+- [ ] **similaritySearch(vector, options)** — find K nearest neighbors by cosine/euclidean distance
+- [ ] **Hybrid queries** — combine graph traversal with vector similarity (e.g., "find documents OWNED_BY this twin that are semantically similar to this query")
+- [ ] **Embedding storage** — store Cohere/OpenAI embeddings directly on Document nodes
+- [ ] **Dimensionality** — support 384, 768, 1024, 1536 dimensions
+
+**Use case:** `graph.similaritySearch(queryEmbedding, { label: 'Document', limit: 5, filter: { twinId: 'bill-personal' } })`
+
+**Why not just use Qdrant?** Same reason as Neo4j — own the stack, authorize it yourself, no external service. One engine, one process, one authorization boundary.
