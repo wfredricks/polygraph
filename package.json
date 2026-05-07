@@ -42,7 +42,8 @@
     "dist",
     "LICENSE",
     "README.md",
-    "ROADMAP.md"
+    "ROADMAP.md",
+    "WHY-POLYGRAPH.md"
   ],
   "engines": {
     "node": ">=18"

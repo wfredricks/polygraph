@@ -2,13 +2,13 @@
 
 **An embeddable graph database you can own, audit, and authorize.**
 
-Graph databases store data as networks of connected entities — nodes, relationships, and properties — making them ideal for supply chains, audit trails, knowledge graphs, digital twins, and any domain where *how things connect* matters as much as the things themselves.
+Graph databases store data as networks of connected entities - nodes, relationships, and properties - making them ideal for supply chains, audit trails, knowledge graphs, digital twins, and any domain where *how things connect* matters as much as the things themselves.
 
-PolyGraph gives you that power as a library. No separate server. No vendor licensing. No authorization gaps. Import it like SQLite, build your graph, traverse it — all in TypeScript.
+PolyGraph gives you that power as a library. No separate server. No vendor licensing. No authorization gaps. Import it like SQLite, build your graph, traverse it - all in TypeScript.
 
 ## Who is this for?
 
-- **Government & defense teams** who need a graph database they can FedRAMP authorize, STIG harden, or deploy to IL4/5 — without waiting for a vendor who may never get there
+- **Government & defense teams** who need a graph database they can FedRAMP authorize, STIG harden, or deploy to IL4/5 - without waiting for a vendor who may never get there
 - **Regulated industries** where every dependency in your stack must be auditable and explainable
 - **AI & digital twin builders** who want graph-native intelligence without the ops burden of a database server
 - **Anyone** tired of authorizing 100% of a product to use 20% of its features
@@ -20,9 +20,22 @@ Commercial graph databases are powerful but come with trade-offs:
 - **Licensing constraints** that limit how you deploy and distribute
 - **Operational complexity** of running a separate database server
 - **Authorization gaps** — Neo4j has no FedRAMP ATO and shows no trajectory toward one
-- **Feature bloat** when you need labeled property graphs but must authorize enterprise clustering, LDAP, and 50 APOC procedures you'll never touch
+- **Feature bloat** when you need labeled property graphs but must authorize enterprise clustering, LDAP, and 50 APOC procedures you’ll never touch
 
 PolyGraph is the alternative: a small, readable codebase that does what you need and nothing you have to explain to an assessor. Every line is auditable, modifiable, and ownable.
+
+|  | PolyGraph | Neo4j Community | AWS Neptune |
+|---|---|---|---|
+| **Install** | `npm install` (2 sec) | Docker + config (30 min) | CloudFormation (hours) |
+| **Runtime** | In-process | Separate JVM server | Managed service |
+| **Memory (10K nodes)** | 12.5 MB | ~200 MB (JVM) | N/A |
+| **Package size** | 31 KB | 600 MB | N/A |
+| **License** | Apache 2.0 | GPL + commercial | Proprietary |
+| **FedRAMP** | You authorize it | Not authorized | Yes (AWS) |
+| **NIST 800-53 tests** | 60 (shipped) | You write them | AWS shared model |
+| **Air-gap capable** | Yes | Yes | No |
+
+See **[WHY-POLYGRAPH.md](WHY-POLYGRAPH.md)** for the full comparison and rationale.
 
 ## Quick Start
 
@@ -83,7 +96,7 @@ await graph.close();
 
 **Traversal**
 - Fluent builder API: `.outgoing()`, `.incoming()`, `.both()`, `.where()`, `.depth()`, `.limit()`, `.unique()`
-- Multi-step chains: `.outgoing('KNOWS').incoming('WORKS_AT')` — follow patterns across relationship types
+- Multi-step chains: `.outgoing('KNOWS').incoming('WORKS_AT')` - follow patterns across relationship types
 - Three collection modes: `collect()` (nodes), `collectPaths()` (full paths), `collectSubgraph()` (nodes + relationships)
 
 **Algorithms**
@@ -97,8 +110,8 @@ await graph.close();
 
 **Storage**
 - Pluggable adapter pattern
-- In-memory adapter (default) — zero native dependencies, instant startup
-- **LevelDB adapter** — persistent, production-grade, data survives restarts
+- In-memory adapter (default) - zero native dependencies, instant startup
+- **LevelDB adapter** - persistent, production-grade, data survives restarts
 
 ```typescript
 import { PolyGraph, LevelAdapter } from 'polygraph-db';
@@ -121,7 +134,7 @@ await graph.close();
 
 ## Specializations
 
-**TwinGraph** (coming) — a PolyGraph specialization for digital twin applications, with pre-defined schemas for persona, memory, insight, and habit management, plus lifecycle integration for born/alive/sleeping/archived twin states.
+**TwinGraph** (coming) - a PolyGraph specialization for digital twin applications, with pre-defined schemas for persona, memory, insight, and habit management, plus lifecycle integration for born/alive/sleeping/archived twin states.
 
 ## Performance
 
@@ -131,17 +144,17 @@ Benchmarked on Apple M-series (Mac mini, in-memory adapter):
 
 | Operation | ops/sec | Avg Latency |
 |-----------|---------|-------------|
-| Node CREATE | 181,000 | 6µs |
-| Node READ | 864,000 | 1µs |
-| Node UPDATE | 365,000 | 3µs |
-| Relationship CREATE | 142,000 | 7µs |
-| Relationship READ | 843,000 | 1µs |
+| Node CREATE | 181,000 | 6μs |
+| Node READ | 864,000 | 1μs |
+| Node UPDATE | 365,000 | 3μs |
+| Relationship CREATE | 142,000 | 7μs |
+| Relationship READ | 843,000 | 1μs |
 
 **Traversal Throughput** (1,000-node graphs)
 
 | Operation | ops/sec | Avg Latency |
 |-----------|---------|-------------|
-| Depth-1 (5 neighbors) | 1,783 | 561µs |
+| Depth-1 (5 neighbors) | 1,783 | 561μs |
 | Depth-2 (30 nodes, tree) | 288 | 3.5ms |
 | Depth-4 (780 nodes, full tree) | 12 | 83ms |
 | Friends-of-friends (social) | 55 | 18ms |
@@ -155,28 +168,28 @@ Benchmarked on Apple M-series (Mac mini, in-memory adapter):
 | 1K nodes | 2.1 MB | ~2.1 KB/node |
 | 10K nodes | 12.5 MB | ~1.3 KB/node |
 | 10K nodes + 20K rels | 38.5 MB | ~1.3 KB/entity |
-| Empty graph | 2.5 KB | — |
+| Empty graph | 2.5 KB | - |
 
 Full benchmark suite: `npm run test:bench`
 
 ## Status & Roadmap
 
-**v0.1 — Core Engine MVP** ✅ *(current)*
+**v0.1 - Core Engine MVP** ✅ *(current)*
 
 - 284 tests passing (166 functional + 60 security + 25 benchmarks + 33 persistence)
 - 95%+ statement / 100% function coverage
 - 100-transaction audit workload completes in ~25ms
 
-**v0.2 — Persistent Storage** 🔨 *(next)*
+**v0.2 - Persistent Storage** 🔨 *(next)*
 - ~~RocksDB adapter~~ → LevelDB adapter (done!), WAL crash recovery, backup/restore, npm publish
 
-**v0.3 — TwinGraph Specialization**
+**v0.3 - TwinGraph Specialization**
 - Digital twin schema, lifecycle, memory/insight operations, Neo4j migration tooling
 
-**v0.4 — Hardening & Server Mode**
+**v0.4 - Hardening & Server Mode**
 - REST/gRPC wrapper, health/metrics, auth, connection pooling
 
-**v0.5 — Query Language**
+**v0.5 - Query Language**
 - Cypher subset parser, query planner, REPL
 
 See **[ROADMAP.md](ROADMAP.md)** for the full plan, design rationale, and future directions.
@@ -197,11 +210,11 @@ See **[ROADMAP.md](ROADMAP.md)** for the full plan, design rationale, and future
 └─────────────────────────────────────────────┘
 ```
 
-**Key design:** Index-free adjacency. Outgoing and incoming relationships are stored directly with the node via sorted key prefixes, making neighbor traversal O(neighbors) with no index hop. This is the same principle that makes Neo4j fast — we just implement it on our terms.
+**Key design:** Index-free adjacency. Outgoing and incoming relationships are stored directly with the node via sorted key prefixes, making neighbor traversal O(neighbors) with no index hop. This is the same principle that makes Neo4j fast - we just implement it on our terms.
 
 ## License
 
-Apache 2.0 — use it, modify it, own it.
+Apache 2.0 - use it, modify it, own it.
 
 ## Contributing
 
