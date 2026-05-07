@@ -1,8 +1,17 @@
 # PolyGraph
 
-**A purpose-built, embeddable graph engine for applications where you need to own the infrastructure.**
+**An embeddable graph database you can own, audit, and authorize.**
 
-PolyGraph is a labeled property graph database that embeds into your application like SQLite — no separate server, no ops burden, no vendor licensing. Import it, create nodes and relationships, traverse your graph.
+Graph databases store data as networks of connected entities — nodes, relationships, and properties — making them ideal for supply chains, audit trails, knowledge graphs, digital twins, and any domain where *how things connect* matters as much as the things themselves.
+
+PolyGraph gives you that power as a library. No separate server. No vendor licensing. No authorization gaps. Import it like SQLite, build your graph, traverse it — all in TypeScript.
+
+## Who is this for?
+
+- **Government & defense teams** who need a graph database they can FedRAMP authorize, STIG harden, or deploy to IL4/5 — without waiting for a vendor who may never get there
+- **Regulated industries** where every dependency in your stack must be auditable and explainable
+- **AI & digital twin builders** who want graph-native intelligence without the ops burden of a database server
+- **Anyone** tired of authorizing 100% of a product to use 20% of its features
 
 ## Why PolyGraph?
 
@@ -10,15 +19,15 @@ Commercial graph databases are powerful but come with trade-offs:
 
 - **Licensing constraints** that limit how you deploy and distribute
 - **Operational complexity** of running a separate database server
-- **Authorization gaps** when your environment requires certified infrastructure (FedRAMP, IL4/5, ATO)
-- **Feature bloat** when you need 20% of what they offer but must authorize 100%
+- **Authorization gaps** — Neo4j has no FedRAMP ATO and shows no trajectory toward one
+- **Feature bloat** when you need labeled property graphs but must authorize enterprise clustering, LDAP, and 50 APOC procedures you'll never touch
 
-PolyGraph gives you the labeled property graph model you need with none of the baggage. Every line of code is auditable, modifiable, and ownable.
+PolyGraph is the alternative: a small, readable codebase that does what you need and nothing you have to explain to an assessor. Every line is auditable, modifiable, and ownable.
 
 ## Quick Start
 
 ```bash
-npm install polygraph
+npm install polygraph  # coming soon to npm
 ```
 
 ```typescript
