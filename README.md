@@ -27,11 +27,11 @@ PolyGraph is the alternative: a small, readable codebase that does what you need
 ## Quick Start
 
 ```bash
-npm install polygraph  # coming soon to npm
+npm install polygraph-db
 ```
 
 ```typescript
-import { PolyGraph } from 'polygraph';
+import { PolyGraph } from 'polygraph-db';
 
 const graph = new PolyGraph();
 await graph.open();

@@ -707,7 +707,7 @@ export class PolyGraph {
 
         if (alt < (distances.get(node.id) ?? Infinity)) {
           distances.set(node.id, alt);
-          previous.set(node.id, { node: await this.getNode(current)!, relationship });
+          previous.set(node.id, { node: (await this.getNode(current))!, relationship });
           unvisited.add(node.id);
         }
       }
