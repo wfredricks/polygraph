@@ -4,6 +4,30 @@ All notable changes to PolyGraph are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] — 2026-05-12
+
+Packaging fix to make `npm install github:owner/polygraph#vX.Y.Z`
+actually produce a usable package. v0.1.1 shipped without a `prepare`
+script and without `src/` in `package.json.files`, so a git-URL install
+left `node_modules/polygraph-db/` with only README + LICENSE + the
+package.json itself — no `src/` to build from and no `dist/` to load.
+
+### Fixed
+
+- `package.json` now declares `"prepare": "npm run build"` so the
+  tarball produced by `npm install <git-url>` runs the tsup build
+  before being consumed.
+- `src` is added to the `files` whitelist so the published artifact
+  (and the git-install tarball) carries it. tsup needs it to produce
+  `dist/`, and `tsconfig.json` references it.
+
+### Verified
+
+- `npm pack` from the source repo produces a 76-file tarball (was 9).
+- Installing the tarball into a fresh project gives a working
+  `polygraph-db` with `dist/index.cjs`, `dist/index.d.ts`, and a
+  loadable `PolyGraph` class.
+
 ## [0.1.1] — 2026-05-12
 
 This release lands several months of development that had been
