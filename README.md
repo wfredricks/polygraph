@@ -92,7 +92,10 @@ await graph.close();
 **Querying**
 - Property filter operators: `$eq`, `$neq`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$contains`, `$startsWith`, `$endsWith`, `$exists`
 - Property indexes with automatic backfill
-- Label-based node lookups
+- Label-based node lookups via the always-on label index
+- Multi-label nodes (a node can carry any number of labels and appears in every label's index)
+
+See [Indexing](#indexing) for the full index story — what's persisted, what's rebuilt on `open()`, and which read shape to reach for.
 
 **Traversal**
 - Fluent builder API: `.outgoing()`, `.incoming()`, `.both()`, `.where()`, `.depth()`, `.limit()`, `.unique()`
@@ -145,6 +148,48 @@ await graph.open();
 await graph.close();
 ```
 
+## Indexing
+
+PolyGraph's indexes are **always-on derived state**, not opt-in structures you decide to maintain. Every write goes through the engine; the engine reflects it into the appropriate index synchronously after the storage adapter confirms the write. On `open()` the engine streams every persisted node and relationship back through the index manager, so the in-memory state is always a faithful function of what's on disk.
+
+**Four index layers, all in-memory, all rebuilt from persistent storage on `open()`:**
+
+| Layer | What it answers | Cost |
+|---|---|---|
+| **Label index** | "All nodes carrying label X" + "every node id in the store" | O(matches) lookup, O(nodes × labels-per-node) rebuild |
+| **Property index** | "All X-labelled nodes where prop = value" (opt-in via `createIndex(label, prop)`) | O(matches) lookup, O(nodes) backfill on `createIndex` |
+| **Adjacency index** | "Outgoing/incoming neighbors of node X by relationship type" | O(neighbors) walk, no index hop |
+| **Composite index** | Pre-configured `(label, prop1, prop2)` triples for hot multi-key reads | O(matches) lookup |
+
+**Storage layout (LevelDB keys).** Every operation maps to a deterministic key schema:
+
+```
+n:{nodeId}                          → Node body
+n:{nodeId}:l:{label}                → Label marker on a node
+n:{nodeId}:o:{relType}:{relId}      → Outgoing adjacency (no index hop)
+n:{nodeId}:i:{relType}:{relId}      → Incoming adjacency
+r:{relId}                           → Relationship body
+i:l:{label}:{nodeId}                → Label index entry
+i:p:{label}:{prop}:{value}:{nodeId} → Property index entry
+```
+
+Node ids and labels are caller-supplied strings and may contain colons (e.g. `foundation/auth:createAuthProvider`, `some/path:Type`). The colon-safe parser (`labelIndexNodeId`) is the one to use when extracting an id from a label-index key during a scan; the older `lastSegment` helper is fine for adjacency keys (which always end in a colon-free relationship UUID) but unsafe for label-index keys with colon-bearing ids.
+
+**Which read shape to reach for:**
+
+- **`findNodes(label, filter?)`** — the dominant read. Hits the in-memory label index, then optionally walks a property index if `filter` matches a configured `(label, prop)` pair. O(matches).
+- **`getNode(id)`** — single key lookup. Use when you already have an id (e.g. a traversal endpoint).
+- **`getNeighbors(id, types?, direction?)`** — the adjacency index. O(neighbors) regardless of graph size. The right shape for any "who connects to X" question.
+- **`traverse(id)`** — fluent builder over `getNeighbors`. Use for multi-hop patterns.
+- **`allNodes()`** — every node, deduped. Backed by the label index's union-of-all-ids set. Use sparingly; if you can name a label, prefer `findNodes`.
+- **`stats()`** — counters only. Use for size checks, not membership.
+
+**Multi-label nodes.** A node with `labels: ['Requirement', 'PlannedRequirement']` appears in both label-index buckets and is returned by `findNodes` for either label. `allNodes()` deduplicates by id so the same node is yielded once regardless of label cardinality. `addLabel` and `removeLabel` mutate both persistent and in-memory state atomically.
+
+**Rebuild on open.** When a `LevelAdapter`-backed graph is reopened, the engine walks `i:l:*` (label-index keys) and `r:*` (relationship bodies) to rebuild every in-memory index from persistent state. The walk is bounded by graph size and dominates startup time above ~10K nodes; everything after is in-memory speed.
+
+**Index correctness was the focus of the 2026-05-12 audit.** A parity test against a real 2,113-node / 3,177-relationship codebase SIG (loaded 1:1 from a Neo4j export) caught a silent dedup bug in `allNodes()` for node ids containing colons. The scenarios suite (`src/__tests__/scenarios/`) now pins colon-id, multi-label, and write→close→reopen invariants against the same real-world shapes.
+
 ## Design Principles
 
 1. **Embed, don't deploy.** Import like SQLite. No server process, no wire protocol, no ops.
@@ -195,23 +240,25 @@ Full benchmark suite: `npm run test:bench`
 
 ## Status & Roadmap
 
-**v0.1 - Core Engine MVP** ✅ *(current)*
+**v0.1 — Core Engine MVP** ✅ *(current)*
 
-- 343 tests passing (166 functional + 60 security + 25 benchmarks + 33 persistence + 23 Cypher bridge + 36 proxy adapter)
-- 95%+ statement / 100% function coverage
-- 100-transaction audit workload completes in ~25ms
+- **479 tests** across 34 files (engine, adapters, indexes, proxy, cypher bridge, qengine, scenarios, security, benchmarks)
+- **91% statements / 94% lines / 97% functions** coverage (gate set at 85/85; aspirational target 95% statements)
+- LevelDB persistence with full reopen fidelity, including multi-label and colon-bearing node ids
+- Parity-tested against a real 2,113-node / 3,177-relationship Neo4j codebase SIG (5/5 functional queries pass; PolyGraph is 3–7× faster on focused queries thanks to in-process execution)
+- 100-transaction audit workload completes in ~25 ms
 
-**v0.2 - Persistent Storage** 🔨 *(next)*
-- ~~RocksDB adapter~~ → LevelDB adapter (done!), WAL crash recovery, backup/restore, npm publish
+**v0.2 — Persistent Storage** 🔨
+- ~~LevelDB adapter~~ ✅ · ~~Reopen-fidelity test suite~~ ✅ · WAL crash recovery · backup/restore · npm publish
 
-**v0.3 - TwinGraph Specialization**
+**v0.3 — TwinGraph Specialization**
 - Digital twin schema, lifecycle, memory/insight operations, Neo4j migration tooling
 
-**v0.4 - Hardening & Server Mode**
+**v0.4 — Hardening & Server Mode**
 - REST/gRPC wrapper, health/metrics, auth, connection pooling
 
-**v0.5 - Query Language**
-- Cypher subset parser, query planner, REPL
+**v0.5 — Query Language (qengine)**
+- A v0 slice of `MATCH (n:Label) RETURN n` is wired and exercised by tests (see `src/qengine/`). Next slices add WHERE pushdown, parameters, multi-pattern matches.
 
 See **[ROADMAP.md](ROADMAP.md)** for the full plan, design rationale, and future directions.
 
@@ -244,7 +291,9 @@ await adapter.createGraphSpace('my-app');
 const node = await adapter.createNode('my-app', 'Person', { name: 'Alice' });
 ```
 
-**Key design:** Index-free adjacency. Outgoing and incoming relationships are stored directly with the node via sorted key prefixes, making neighbor traversal O(neighbors) with no index hop. This is the same principle that makes Neo4j fast - we just implement it on our terms.
+**Key design:** Index-free adjacency. Outgoing and incoming relationships are stored directly with the node via sorted key prefixes, making neighbor traversal O(neighbors) with no index hop. This is the same principle that makes Neo4j fast — we just implement it on our terms.
+
+See [Indexing](#indexing) above for the full index design — what's persistent, what's derived, and the rebuild contract on `open()`.
 
 ## License
 

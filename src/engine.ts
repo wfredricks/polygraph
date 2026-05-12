@@ -25,6 +25,7 @@ import type {
 } from './types.js';
 import { MemoryAdapter } from './adapters/memory.js';
 import { TraversalBuilder } from './traversal.js';
+import { IndexManager } from './indexes/index.js';
 import {
   // Cypher bridge
   parseCypher,
@@ -53,6 +54,7 @@ import {
   COUNTER_NODE_COUNT,
   COUNTER_REL_COUNT,
   lastSegment,
+  labelIndexNodeId,
   stripPrefix,
   // Serialization
   serializeNode,
@@ -75,7 +77,15 @@ import {
  */
 export class PolyGraph {
   private adapter: StorageAdapter;
+  /**
+   * Legacy opt-in flag set: `${label}:${prop}` for property indexes
+   * registered via createIndex(). Kept for backward compatibility with
+   * the existing dropIndex / createIndex API; the in-memory `mem`
+   * always covers the configured pairs in indexes/config.ts.
+   */
   private indexes: Map<string, Set<string>> = new Map();
+  /** In-memory index layer (label / property / adjacency / composite). */
+  private mem: IndexManager = new IndexManager();
   private counterLock: Promise<void> = Promise.resolve();
 
   constructor(options?: PolyGraphOptions) {
@@ -84,8 +94,59 @@ export class PolyGraph {
 
   // ─── Lifecycle ─────────────────────────────────────────────────────
 
+  /**
+   * Open the storage adapter and rebuild the in-memory indexes by
+   * walking the persistent node + relationship streams.
+   *
+   * Why: Indexes are derived state. A fresh `MemoryAdapter` has
+   * nothing to walk; a `LevelAdapter` rehydrating an on-disk store
+   * needs every node and every relationship played back into the
+   * indexes once before any reads land. The rebuild is bounded by the
+   * persisted graph size and is the dominant startup cost above
+   * ~10K nodes — we accept that because every subsequent read is then
+   * O(matches) instead of O(K log K).
+   */
   async open(): Promise<void> {
     await this.adapter.open();
+    await this.rebuildIndexes();
+  }
+
+  /**
+   * Walk the persisted node + relationship stores and rebuild every
+   * in-memory index from scratch. Exposed for tests and for callers
+   * that want to force a resync after bulk-loading via the adapter.
+   */
+  async rebuildIndexes(): Promise<void> {
+    await this.mem.rebuildFromStreams(this.streamPersistedNodes(), this.streamPersistedRels());
+  }
+
+  /**
+   * Async iterator over every persisted node, in adapter key order.
+   *
+   * Walks the label-index keyspace (`i:l:{label}:{nodeId}`) and dedupes
+   * by node id. Uses {@link labelIndexNodeId} for colon-safe parsing
+   * — a node whose id contains a colon (e.g.
+   * `foundation/auth:createAuthProvider`) used to be silently dropped
+   * here because the original implementation took `lastSegment(key)`.
+   * See 2026-05-12 parity-test write-up for the surfaced symptom.
+   */
+  private async *streamPersistedNodes(): AsyncIterable<Node> {
+    const seen = new Set<NodeId>();
+    for await (const { key } of this.adapter.scan('i:l:')) {
+      const nodeId = labelIndexNodeId(key);
+      if (nodeId === null) continue;
+      if (seen.has(nodeId)) continue;
+      seen.add(nodeId);
+      const n = await this.getNode(nodeId);
+      if (n) yield n;
+    }
+  }
+
+  /** Async iterator over every persisted relationship. */
+  private async *streamPersistedRels(): AsyncIterable<Relationship> {
+    for await (const { value } of this.adapter.scan(relPrefix())) {
+      yield deserializeRelationship(value);
+    }
   }
 
   async close(): Promise<void> {
@@ -120,6 +181,12 @@ export class PolyGraph {
     await this.adapter.batch(ops);
     await this.incrementCounter(COUNTER_NODE_COUNT);
 
+    // In-memory index: reflect the new node across label / property /
+    // adjacency / composite indexes. Synchronous after the adapter
+    // write succeeded so the invariant "index reflects persisted
+    // state" holds.
+    this.mem.applyNodeCreated(node);
+
     return node;
   }
 
@@ -132,6 +199,12 @@ export class PolyGraph {
   async updateNode(id: NodeId, properties: Record<string, any>): Promise<Node> {
     const node = await this.getNode(id);
     if (!node) throw new Error(`Node ${id} not found`);
+
+    // Snapshot the pre-merge state for the in-memory index diff. The
+    // node object we mutate below shares its properties bag with this
+    // snapshot only by reference — we make a shallow copy of the bag
+    // so the index sees the genuine before-values.
+    const before: Node = { id: node.id, labels: [...node.labels], properties: { ...node.properties } };
 
     const ops: Array<{ type: 'put' | 'del'; key: string; value?: Buffer }> = [];
     const marker = existsMarker();
@@ -158,6 +231,10 @@ export class PolyGraph {
     }
 
     await this.adapter.batch(ops);
+
+    // In-memory index: diff before vs after.
+    this.mem.applyNodeUpdated(before, node);
+
     return node;
   }
 
@@ -167,18 +244,28 @@ export class PolyGraph {
 
     const ops: Array<{ type: 'put' | 'del'; key: string; value?: Buffer }> = [];
 
+    // Collect the cascaded relationships so we can vacate them from
+    // the in-memory adjacency index after the adapter write succeeds.
+    const cascadedRels: Relationship[] = [];
+
     // Cascade delete outgoing relationships
     for await (const { key } of this.adapter.scan(nodeOutPrefix(id))) {
       const relId = lastSegment(key);
       const rel = await this.getRelationship(relId);
-      if (rel) await this.deleteRelationshipInternal(rel, ops);
+      if (rel) {
+        cascadedRels.push(rel);
+        await this.deleteRelationshipInternal(rel, ops);
+      }
     }
 
     // Cascade delete incoming relationships
     for await (const { key } of this.adapter.scan(nodeInPrefix(id))) {
       const relId = lastSegment(key);
       const rel = await this.getRelationship(relId);
-      if (rel) await this.deleteRelationshipInternal(rel, ops);
+      if (rel) {
+        cascadedRels.push(rel);
+        await this.deleteRelationshipInternal(rel, ops);
+      }
     }
 
     // Delete label markers and label index entries
@@ -199,41 +286,73 @@ export class PolyGraph {
     ops.push({ type: 'del', key: nodeKey(id) });
     await this.adapter.batch(ops);
     await this.decrementCounter(COUNTER_NODE_COUNT);
+
+    // In-memory index: vacate cascaded edges first (so the node's own
+    // adjacency bucket doesn't go stale), then drop the node.
+    for (const rel of cascadedRels) {
+      this.mem.applyRelationshipDeleted(rel);
+    }
+    this.mem.applyNodeDeleted(node);
+  }
+
+  /**
+   * Returns every node in the graph, deduped.
+   *
+   * Why: Bare `MATCH (n)` (no label) needs a full scan. PolyGraph's
+   * primary key for nodes is `n:{id}`, but adjacency markers live
+   * under the same `n:` prefix (`n:{id}:o:{type}:{relId}` etc.), so a
+   * naive prefix scan would mix node bodies with adjacency entries.
+   * Walking the label index (`i:l:{label}:{nodeId}`) is the safe
+   * alternative: every labelled node appears at least once there.
+   *
+   * Cost: O(nodes × labels-per-node) scan + O(nodes) lookups. Callers
+   * that know the labels should prefer `findNodes(label)`.
+   *
+   * Tonight (2026-05-11) the Memory Window route relied on this
+   * shape — we were silently returning empty before because the
+   * cypher bridge refused `MATCH (n)` outright.
+   */
+  async allNodes(): Promise<Node[]> {
+    // Fast path: the in-memory label index already holds the deduped
+    // set of node ids. Snapshot it before iterating in case a concurrent
+    // delete mutates the underlying Set mid-flight.
+    const ids = Array.from(this.mem.label.allNodeIds());
+    const out: Node[] = [];
+    for (const id of ids) {
+      const n = await this.getNode(id);
+      if (n) out.push(n);
+    }
+    return out;
   }
 
   async findNodes(label: string, filter?: PropertyFilter): Promise<Node[]> {
     const nodes: Node[] = [];
 
-    // Try indexed lookup first
+    // Fast path — in-memory property index, if the (label, prop) pair is
+    // one of the configured indexed pairs and the filter is an equality.
     if (filter) {
       for (const [propKey, condition] of Object.entries(filter)) {
-        if (this.indexes.has(`${label}:${propKey}`)) {
-          const value = extractEqualityValue(condition);
-          if (value !== undefined) {
-            const prefix = propIndexValuePrefix(label, propKey, value);
-            for await (const { key } of this.adapter.scan(prefix)) {
-              const nodeId = stripPrefix(key, prefix);
-              const node = await this.getNode(nodeId);
-              if (node && matchesFilter(node.properties, filter)) {
-                nodes.push(node);
-              }
-            }
-            return nodes;
-          }
+        const value = extractEqualityValue(condition);
+        if (value === undefined) continue;
+        const hit = this.mem.property.lookup(label, propKey, value);
+        if (hit === null) continue; // not indexed — keep checking other filter keys
+        // Snapshot the id Set before async work in case of concurrent writes.
+        const ids = Array.from(hit);
+        for (const id of ids) {
+          const n = await this.getNode(id);
+          if (n && matchesFilter(n.properties, filter)) nodes.push(n);
         }
+        return nodes;
       }
     }
 
-    // Fall back to label index scan
-    const prefix = labelIndexPrefix(label);
-    for await (const { key } of this.adapter.scan(prefix)) {
-      const nodeId = stripPrefix(key, prefix);
-      const node = await this.getNode(nodeId);
-      if (node && (!filter || matchesFilter(node.properties, filter))) {
-        nodes.push(node);
-      }
+    // Indexed-but-no-filter (or filter not on an indexed prop): use the
+    // in-memory label index directly.
+    const ids = Array.from(this.mem.label.lookup(label));
+    for (const id of ids) {
+      const n = await this.getNode(id);
+      if (n && (!filter || matchesFilter(n.properties, filter))) nodes.push(n);
     }
-
     return nodes;
   }
 
@@ -257,6 +376,7 @@ export class PolyGraph {
     }
 
     await this.adapter.batch(ops);
+    this.mem.applyLabelAdded(node, label);
     return node;
   }
 
@@ -266,6 +386,11 @@ export class PolyGraph {
 
     const idx = node.labels.indexOf(label);
     if (idx === -1) return node;
+
+    // Snapshot label set *before* we mutate `node.labels`; the in-memory
+    // index helpers iterate the slice's labels to decide which entries
+    // to vacate, and we still need the to-be-removed label present.
+    const snapshotForIndex: Node = { id: node.id, labels: [...node.labels], properties: node.properties };
 
     node.labels.splice(idx, 1);
     const ops: Array<{ type: 'put' | 'del'; key: string; value?: Buffer }> = [];
@@ -281,6 +406,7 @@ export class PolyGraph {
     }
 
     await this.adapter.batch(ops);
+    this.mem.applyLabelRemoved(snapshotForIndex, label);
     return node;
   }
 
@@ -314,6 +440,7 @@ export class PolyGraph {
 
     await this.adapter.batch(ops);
     await this.incrementCounter(COUNTER_REL_COUNT);
+    this.mem.applyRelationshipCreated(relationship);
 
     return relationship;
   }
@@ -340,6 +467,7 @@ export class PolyGraph {
     const ops: Array<{ type: 'put' | 'del'; key: string; value?: Buffer }> = [];
     await this.deleteRelationshipInternal(rel, ops);
     await this.adapter.batch(ops);
+    this.mem.applyRelationshipDeleted(rel);
   }
 
   private async deleteRelationshipInternal(
@@ -441,27 +569,37 @@ export class PolyGraph {
   ): Promise<Array<{ node: Node; relationship: Relationship }>> {
     const neighbors: Array<{ node: Node; relationship: Relationship }> = [];
 
-    const directions: Array<'o' | 'i'> = [];
-    if (direction === 'outgoing' || direction === 'both') directions.push('o');
-    if (direction === 'incoming' || direction === 'both') directions.push('i');
+    const directions: Array<'outgoing' | 'incoming'> = [];
+    if (direction === 'outgoing' || direction === 'both') directions.push('outgoing');
+    if (direction === 'incoming' || direction === 'both') directions.push('incoming');
 
+    // Fast path: in-memory adjacency index. We collect the relevant
+    // rel ids first (a snapshot of Sets), then materialize relationship
+    // + endpoint nodes. Snapshotting avoids reading from the index
+    // while we await further I/O (which a concurrent delete could
+    // otherwise mutate underneath us).
+    const relIds: Array<{ relId: RelId; dir: 'outgoing' | 'incoming' }> = [];
     for (const dir of directions) {
-      const prefixes = (relationshipTypes && relationshipTypes.length > 0)
-        ? relationshipTypes.map((t) => dir === 'o' ? nodeOutTypePrefix(nodeId, t) : nodeInTypePrefix(nodeId, t))
-        : [dir === 'o' ? nodeOutPrefix(nodeId) : nodeInPrefix(nodeId)];
-
-      for (const prefix of prefixes) {
-        for await (const { key } of this.adapter.scan(prefix)) {
-          const relId = lastSegment(key);
-          const rel = await this.getRelationship(relId);
-          if (!rel) continue;
-
-          const neighborId = dir === 'o' ? rel.endNode : rel.startNode;
-          const neighbor = await this.getNode(neighborId);
-          if (neighbor) {
-            neighbors.push({ node: neighbor, relationship: rel });
+      if (relationshipTypes && relationshipTypes.length > 0) {
+        for (const t of relationshipTypes) {
+          for (const rid of this.mem.adjacency.lookup(nodeId, t, dir)) {
+            relIds.push({ relId: rid, dir });
           }
         }
+      } else {
+        for (const rid of this.mem.adjacency.lookupAll(nodeId, dir)) {
+          relIds.push({ relId: rid, dir });
+        }
+      }
+    }
+
+    for (const { relId, dir } of relIds) {
+      const rel = await this.getRelationship(relId);
+      if (!rel) continue;
+      const neighborId = dir === 'outgoing' ? rel.endNode : rel.startNode;
+      const neighbor = await this.getNode(neighborId);
+      if (neighbor) {
+        neighbors.push({ node: neighbor, relationship: rel });
       }
     }
 

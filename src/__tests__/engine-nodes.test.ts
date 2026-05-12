@@ -276,6 +276,34 @@ describe('PolyGraph - Node Operations', () => {
     });
   });
 
+  describe('allNodes', () => {
+    // Why: bare MATCH (n) in the Cypher bridge / Memory Window route
+    // needs a full-scan primitive. allNodes() walks the label index
+    // and dedupes; here we pin down its contract.
+    it('returns every labelled node, deduped', async () => {
+      await graph.createNode(['Person'], { name: 'Alice' });
+      await graph.createNode(['Person', 'Employee'], { name: 'Bob' });
+      await graph.createNode(['Company'], { name: 'Acme' });
+      const all = await graph.allNodes();
+      expect(all).toHaveLength(3);
+      const names = all.map(n => n.properties.name).sort();
+      expect(names).toEqual(['Acme', 'Alice', 'Bob']);
+    });
+
+    it('returns an empty array on an empty graph', async () => {
+      const all = await graph.allNodes();
+      expect(all).toEqual([]);
+    });
+
+    it('reflects deletions immediately', async () => {
+      const a = await graph.createNode(['Person'], { name: 'Alice' });
+      await graph.createNode(['Person'], { name: 'Bob' });
+      expect(await graph.allNodes()).toHaveLength(2);
+      await graph.deleteNode(a.id);
+      expect(await graph.allNodes()).toHaveLength(1);
+    });
+  });
+
   describe('Stats', () => {
     it('should return correct stats', async () => {
       await graph.createNode(['Person']);

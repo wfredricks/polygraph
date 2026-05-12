@@ -234,4 +234,60 @@ describe('PolyGraph on LevelDB — Persistence Integration', { timeout: 30_000 }
 
     await graph.close();
   });
+
+  /**
+   * Regression for the 2026-05-12 parity-test finding: node ids that
+   * contain colons (e.g. `foundation/auth:createAuthProvider`) used to
+   * be silently dropped on reopen because `streamPersistedNodes`
+   * extracted the node id from the label-index key with
+   * `lastSegment(key)`, which split on `:` and kept only the trailing
+   * token. After the fix, `allNodes()` and the rebuilt label index
+   * both return the full set on reopen.
+   */
+  it('should rehydrate nodes whose ids contain colons (regression)', async () => {
+    const { graph, dbPath } = await createPersistentGraph();
+
+    const colonIds = [
+      'foundation/auth:createAuthProvider',
+      'foundation/auth:BypassProvider',
+      'foundation/auth:AuthProviderInterface',
+      'organism/continuity:getOperationModule',
+      'a:b:c:d',
+      'simple-no-colons',
+    ];
+    for (const id of colonIds) {
+      await graph.createNode(['Thing'], { id }, id);
+    }
+
+    // Pre-close sanity: in-memory index is correct.
+    const beforeAll = await graph.allNodes();
+    expect(beforeAll.map((n) => n.id).sort()).toEqual([...colonIds].sort());
+
+    await graph.close();
+
+    // Reopen — forces `rebuildIndexes()` to walk the label-index keys
+    // and parse the node ids back out. This is the path the parity
+    // bug lived on.
+    const reopened = await reopenGraph(dbPath);
+    try {
+      const afterAll = await reopened.allNodes();
+      expect(afterAll.map((n) => n.id).sort()).toEqual([...colonIds].sort());
+
+      const stats = await reopened.stats();
+      expect(stats.nodeCount).toBe(colonIds.length);
+
+      // Each node is still individually retrievable by its full id.
+      for (const id of colonIds) {
+        const n = await reopened.getNode(id);
+        expect(n, `getNode after reopen: ${id}`).not.toBeNull();
+        expect(n!.id).toBe(id);
+      }
+
+      // findNodes works through the rebuilt label index.
+      const things = await reopened.findNodes('Thing');
+      expect(things.length).toBe(colonIds.length);
+    } finally {
+      await reopened.close();
+    }
+  });
 });
