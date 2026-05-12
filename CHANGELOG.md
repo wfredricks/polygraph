@@ -4,6 +4,40 @@ All notable changes to PolyGraph are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] — 2026-05-12
+
+Documentation-only release: removes the TwinGraph specialization from
+the roadmap, the README, and the layered-architecture diagrams. No
+code changes.
+
+### Removed
+
+- **TwinGraph as a planned specialization.** The package at
+  `artifacts/twingraph/` was deleted (it was 668 lines that
+  duplicated PolyGraph's own `proxy/polygraph-proxy-adapter.ts`,
+  with none of the originally-promised twin schema / lifecycle /
+  memory surface built, no consumers, and a README that overpromised
+  what the code did). The Twin Constellation uses PolyGraph's
+  `GraphProxyAdapter` directly.
+
+### Changed
+
+- `README.md` — removed the "Specializations" section that promoted a
+  forthcoming TwinGraph layer; updated the architecture diagram to
+  drop the TwinGraph row; renumbered v0.3/v0.4/v0.5 milestones now
+  that v0.3 isn't TwinGraph.
+- `ROADMAP.md` — removed the v0.3 TwinGraph Specialization entry;
+  renumbered Hardening & Server Mode to v0.3, Query Language to v0.4,
+  Vector Search to v0.5.
+- `POLYGRAPH-DESIGN.md` — §4 retained as design history but flagged
+  as cancelled with the reason. Top-of-doc note added so a reader
+  doesn't think TwinGraph is upcoming.
+
+The discipline lesson is in `PUBLISHING.md` at the workspace root:
+*a package needs a real consumer and real surface beyond what the
+dependency it wraps already provides; branding alone is not a reason
+to ship.*
+
 ## [0.1.2] — 2026-05-12
 
 Packaging fix to make `npm install github:owner/polygraph#vX.Y.Z`

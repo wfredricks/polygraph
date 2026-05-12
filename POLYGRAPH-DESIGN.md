@@ -10,7 +10,7 @@
 
 PolyGraph is a lightweight, embeddable labeled property graph engine designed for mission-critical applications where vendor independence and government ownership of infrastructure are non-negotiable. It provides the graph storage, traversal, and query capabilities required by intelligence and audit applications without the operational complexity, licensing constraints, or FedRAMP gaps of commercial graph databases.
 
-**TwinGraph** is the first specialization of PolyGraph, optimized for the User Digital Twin (UDT) application — adding schema conventions, lifecycle semantics, and traversal patterns specific to digital twin workloads.
+> **Note (2026-05-12):** This document originally described a planned "TwinGraph" specialization. That specialization has been cancelled — see §4 below for the historical record and why. PolyGraph itself is the deliverable; the digital-twin work it backs lives in `artifacts/twin/` and uses PolyGraph directly through its `GraphProxyAdapter`.
 
 ### Why Now
 
@@ -22,7 +22,7 @@ PolyGraph is a lightweight, embeddable labeled property graph engine designed fo
 ### Naming
 
 - **PolyGraph** — the general-purpose graph engine (poly = many forms; also: truth-detection for audit contexts)
-- **TwinGraph** — the UDT-specialized fork with twin-native schema, lifecycle, and traversal semantics
+- **TwinGraph** (cancelled, 2026-05-12) — was planned as a UDT-specialized fork; in practice PolyGraph's `GraphProxyAdapter` already gave the consumer everything it needed, so a separate package was carrying empty branding rather than real surface. See §4.
 
 ---
 
@@ -57,8 +57,8 @@ Follows the established pattern: LiteBB (blackboard), LiteLLM (model proxy). Min
 │                  Application                     │
 │         (AuditInsight / UDT / SIG)              │
 ├─────────────────────────────────────────────────┤
-│              TwinGraph (optional)                 │
-│   Twin schema · Lifecycle · Specialized queries  │
+│   Graph Proxy (twin uses this) · Cypher Bridge   │
+│         qengine (v0: MATCH...RETURN)              │
 ├─────────────────────────────────────────────────┤
 │                   PolyGraph                       │
 │  ┌───────────┐ ┌──────────┐ ┌────────────────┐  │
@@ -236,9 +236,32 @@ const scores = await graph.algo.run('pagerank', { dampingFactor: 0.85 });
 
 ---
 
-## 4. TwinGraph Specialization
+## 4. TwinGraph Specialization (cancelled, 2026-05-12)
 
-TwinGraph extends PolyGraph with UDT-specific conventions:
+> The section below is the *original plan*. It is kept here as design
+> history. As of 2026-05-12 the TwinGraph package has been deleted.
+>
+> **Why cancelled.** When we actually shipped v0.1 of TwinGraph, the
+> code in it was 668 lines split across a `PolyGraphProxyAdapter`
+> (graph-space wrapper via label prefixes) and its types. None of the
+> originally-planned twin schema, lifecycle, memory operations, or
+> insight surface had been built. Meanwhile PolyGraph's own
+> `proxy/polygraph-proxy-adapter.ts` had been growing in parallel and
+> now carries the same graph-space behaviour (and more — transactions,
+> reset, PortableQuery support, ~82% line coverage). The consumer
+> (the Twin Constellation at `artifacts/twin/`) uses PolyGraph's
+> proxy directly. TwinGraph as a separate package added no real
+> surface and would have to keep its promises eventually — the
+> integrity cost of shipping it as-is was higher than the cost of
+> deleting it.
+>
+> The schema and lifecycle ideas below remain useful as a vocabulary
+> for *the actual twin* (in the twin repo). If someone wanted a
+> reusable twin engine on top of PolyGraph in the future, this is
+> still a reasonable starting sketch — but it would need to be real
+> code with a real consumer, not branding.
+
+Original plan: TwinGraph extends PolyGraph with UDT-specific conventions:
 
 ### 4.1 Schema Conventions
 

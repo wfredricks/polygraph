@@ -40,22 +40,7 @@ This roadmap reflects where we're headed. Timelines are estimates, not promises 
 
 ---
 
-## 🔨 v0.3 — TwinGraph Specialization
-
-*The first domain-specific fork. Purpose-built for digital twin applications.*
-
-- [ ] Pre-defined twin schema (Persona, Memory, Insight, Habit, KPI, Contact, Event, Document)
-- [ ] Pre-defined relationship types (HAS_PERSONA, REMEMBERS, LEARNED_FROM, PREFERS, TRACKS_KPI)
-- [ ] Twin lifecycle state machine (born → alive → sleeping → archived)
-- [ ] Memory operations: remember, recall, forget
-- [ ] Insight and learning loop integration
-- [ ] Migration tooling from Neo4j (dual-write → shadow-read → cutover)
-
-**Why a specialization:** Digital twins are the first real consumer of PolyGraph. Building TwinGraph proves the extensibility model and gives twin developers a head start.
-
----
-
-## 📋 v0.4 — Hardening & Server Mode
+## 📋 v0.3 — Hardening & Server Mode
 
 *Production-ready. Optional multi-process access.*
 
@@ -68,7 +53,7 @@ This roadmap reflects where we're headed. Timelines are estimates, not promises 
 
 ---
 
-## 📋 v0.5 — Query Language
+## 📋 v0.4 — Query Language
 
 *For humans, not just code. Analyst tooling and dashboards.*
 
@@ -110,7 +95,7 @@ The roadmap evolves based on what real users need. Your use case shapes what get
 
 ---
 
-## 🔥 v0.4 — Vector Search (NEW — 2026-05-07)
+## 🔥 v0.5 — Vector Search (NEW — 2026-05-07)
 
 *Graph + vectors in one engine. The WOW factor.*
 

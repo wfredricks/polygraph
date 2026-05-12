@@ -198,10 +198,6 @@ Node ids and labels are caller-supplied strings and may contain colons (e.g. `fo
 4. **TypeScript-native.** Fluent API, full type safety, no query language needed. Your IDE is your query tool.
 5. **Auditable.** Every line readable. Small codebase = smaller attack surface = faster authorization.
 
-## Specializations
-
-**TwinGraph** (coming) - a PolyGraph specialization for digital twin applications, with pre-defined schemas for persona, memory, insight, and habit management, plus lifecycle integration for born/alive/sleeping/archived twin states.
-
 ## Performance
 
 Benchmarked on Apple M-series (Mac mini, in-memory adapter):
@@ -251,13 +247,10 @@ Full benchmark suite: `npm run test:bench`
 **v0.2 — Persistent Storage** 🔨
 - ~~LevelDB adapter~~ ✅ · ~~Reopen-fidelity test suite~~ ✅ · WAL crash recovery · backup/restore · npm publish
 
-**v0.3 — TwinGraph Specialization**
-- Digital twin schema, lifecycle, memory/insight operations, Neo4j migration tooling
-
-**v0.4 — Hardening & Server Mode**
+**v0.3 — Hardening & Server Mode**
 - REST/gRPC wrapper, health/metrics, auth, connection pooling
 
-**v0.5 — Query Language (qengine)**
+**v0.4 — Query Language (qengine)**
 - A v0 slice of `MATCH (n:Label) RETURN n` is wired and exercised by tests (see `src/qengine/`). Next slices add WHERE pushdown, parameters, multi-pattern matches.
 
 See **[ROADMAP.md](ROADMAP.md)** for the full plan, design rationale, and future directions.
@@ -268,10 +261,9 @@ See **[ROADMAP.md](ROADMAP.md)** for the full plan, design rationale, and future
 ┌─────────────────────────────────────────────┐
 │              Your Application                │
 ├─────────────────────────────────────────────┤
-│         TwinGraph (optional layer)           │
-├─────────────────────────────────────────────┤
 │               PolyGraph Engine               │
 │  Graph API · Traversal · Indexes · Tx Mgr   │
+│  Cypher Bridge · Graph Proxy · qengine (v0)  │
 ├─────────────────────────────────────────────┤
 │            Storage Adapter                   │
 │   MemoryAdapter (default) │ LevelAdapter      │

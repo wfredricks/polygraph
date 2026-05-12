@@ -1,6 +1,6 @@
 {
   "name": "polygraph-db",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "An embeddable graph database you can own, audit, and authorize. Labeled property graph engine in pure TypeScript.",
   "author": "William Fredricks",
   "license": "Apache-2.0",
